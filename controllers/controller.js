@@ -128,7 +128,7 @@ class Controller {
 
             let [calledReport, created] = await Report.findOrCreate({
                 where: { code },
-                default: {
+                defaults: {
                     code,
                     creditValue: 0,
                     debitValue: 0,
@@ -138,7 +138,7 @@ class Controller {
 
             let [calledTransaction, opened] = await Transaction.findOrCreate({
                 where: { status: 'Open' },
-                default: {
+                defaults: {
                     reportId: calledReport.id,
                     cashierId: req.user.id,
                     value: 0,
@@ -183,17 +183,29 @@ class Controller {
 
             let value = ((100 - discount) / 100) * (price * amount)
 
-            let newCart = await Cart.create({ transactionId, productId, amount, price, discount, value })
-
-            await History.create({
-                type: 'Product',
-                description: `Product ${calledProduct.name} has been sold by: ${amount} piece, stock left: ${calledProduct.stock - amount}`,
-                userId: req.user.id
+            let [ calledCart, created ] = await Cart.findOrCreate({
+                where: {productId},
+                defaults: {transactionId, productId, amount, price, discount, value}
             })
-            await Product.decrement({ stock: amount }, { where: { id: productId } })
-            await Product.increment({ sales: amount }, { where: { id: productId } })
 
-            res.status(201).json(newCart)
+            if (created) {
+                await History.create({
+                    type: 'Cart',
+                    description: `${calledProduct.name} has been added by: ${amount} piece to new cart ${calledCart.id} in transaction ${transactionId}`,
+                    userId: req.user.id
+                })
+            } else {
+                await calledCart.increment({ amount })
+                await History.create({
+                    type: 'Cart',
+                    description: `${calledProduct.name} has been added more by: ${amount} piece to existing cart ${calledCart.id} in transaction ${transactionId}`,
+                    userId: req.user.id
+                })
+            }
+            await calledProduct.decrement({ stock: amount })
+            await calledProduct.increment({ sales: amount })
+
+            res.status(201).json(calledCart)
         } catch (error) {
             next(error)
         }
@@ -395,7 +407,7 @@ class Controller {
 
             let [calledReport, created] = await Report.findOrCreate({
                 where: { code },
-                default: {
+                defaults: {
                     code,
                     creditValue: 0,
                     debitValue: 0,
@@ -415,7 +427,7 @@ class Controller {
 
             let [calledProduct, isCreated] = await Product.findOrCreate({
                 where: { name },
-                default: {
+                defaults: {
                     name, image, stock, sales: 0, price, vendor, status: 'Active', categoryId
                 }
             })
