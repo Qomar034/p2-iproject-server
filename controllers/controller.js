@@ -172,7 +172,7 @@ class Controller {
 
     static async postCart(req, res, next) {
         try {
-            let { transactionId, productId, amount, price, discount } = req.body
+            let { transactionId, productId, amount, discount } = req.body
             let calledProduct = await Product.findOne({ where: { id: productId } })
 
             if (!calledProduct) throw ({ name: "InvalidProductId" })
@@ -181,6 +181,7 @@ class Controller {
             if (calledProduct.stock == 0) throw ({ name: "InvalidProductStock" })
             if (calledProduct.stock < amount) throw ({ name: "InvalidProductAmount" })
 
+            let price = calledProduct.price
             let value = ((100 - discount) / 100) * (price * amount)
 
             let [ calledCart, created ] = await Cart.findOrCreate({
@@ -196,6 +197,7 @@ class Controller {
                 })
             } else {
                 await calledCart.increment({ amount })
+                await calledCart.increment({ value })
                 await History.create({
                     type: 'Cart',
                     description: `${calledProduct.name} has been added more by: ${amount} piece to existing cart ${calledCart.id} in transaction ${transactionId}`,
@@ -215,7 +217,7 @@ class Controller {
         try {
             let { transactionId } = req.params
 
-            let calledCarts = await Cart.findAll({ where: { transactionId } })
+            let calledCarts = await Cart.findAll({ where: { transactionId }, include: [Product], order: [['id', 'ASC']] })
 
             res.status(200).json(calledCarts)
         } catch (error) {
