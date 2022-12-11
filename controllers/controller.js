@@ -95,13 +95,13 @@ class Controller {
 
             let pagedFilteredProducts;
             if (!filter && !search){
-                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active'}, limit, offset, include: [Category]});
+                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active'}, limit, offset, include: [Category], order: [['id', 'ASC']]});
             } else if (!filter && search) {
-                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', name: {[Op.iLike]: `%${search}%`}}, limit, offset, include: [Category]});
+                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', name: {[Op.iLike]: `%${search}%`}}, limit, offset, include: [Category], order: [['id', 'ASC']]});
             } else if (filter && !search) {
-                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', categoryId: filter}, limit, offset, include: [Category]});
+                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', categoryId: filter}, limit, offset, include: [Category], order: [['id', 'ASC']]});
             } else if (filter && search) {
-                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', categoryId: filter, name: {[Op.iLike]: `%${search}%`}}, limit, offset, include: [Category]});
+                pagedFilteredProducts = await Product.findAndCountAll({where: {status: 'Active', categoryId: filter, name: {[Op.iLike]: `%${search}%`}}, limit, offset, include: [Category], order: [['id', 'ASC']]});
             }
 
             console.log(pagedFilteredProducts);
@@ -124,40 +124,44 @@ class Controller {
 
     static async openTransaction (req, res, next){
         try {
-            let code = new Date().toLocaleDateString("fr-CA").replace('-', 'Y').replace('-','M') + 'D'
+            let calledTransaction = await Transaction.findOne({where: {status: 'Open'}})
 
-            let [ calledReport, created ] = await Report.findOrCreate({
-                where: {code},
-                default: {
-                    code,
-                    creditValue: 0,
-                    debitValue: 0,
-                    profit: 0
-                }
-            })
-
-            let calledTransaction = await Transaction.create({
-                reportId: calledReport.id,
-                cashierId: req.user.id,
-                value: 0,
-                payment: '',
-                point: 0,
-                status: 'Open'
-            })
-            
-            if(created) {
-                let reportHistory = await History.create({
-                    type: 'Report',
-                    description: `${new Date().toDateString()} Report has been created`,
+            if (!calledTransaction) {
+                let code = new Date().toLocaleDateString("fr-CA").replace('-', 'Y').replace('-','M') + 'D'
+    
+                let [ calledReport, created ] = await Report.findOrCreate({
+                    where: {code},
+                    default: {
+                        code,
+                        creditValue: 0,
+                        debitValue: 0,
+                        profit: 0
+                    }
+                })
+    
+                calledTransaction = await Transaction.create({
+                    reportId: calledReport.id,
+                    cashierId: req.user.id,
+                    value: 0,
+                    payment: '',
+                    point: 0,
+                    status: 'Open'
+                })
+                
+                if(created) {
+                    await History.create({
+                        type: 'Report',
+                        description: `${new Date().toDateString()} Report has been created`,
+                        userId: req.user.id
+                    })
+                } 
+    
+                await History.create({
+                    type: 'Transaction',
+                    description: `Transaction ${calledTransaction.id} has been created and is Open`,
                     userId: req.user.id
                 })
-            } 
-
-            let transactionHistory = await History.create({
-                type: 'Transaction',
-                description: `Transaction ${calledTransaction.id} has been created and is Open`,
-                userId: req.user.id
-            })
+            }
 
             res.status(201).json(calledTransaction)
         } catch (error) {
